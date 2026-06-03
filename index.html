@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avance 1: Simulación de Enjambre</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #interfaz-usuario {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(1, 17, 37, 0.85); padding: 15px;
+            border-radius: 8px; color: #ffffff; z-index: 100;
+            border: 1px solid #00aaff; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        #interfaz-usuario h3 { margin: 0 0 5px 0; font-size: 14px; text-transform: uppercase; color: #00ffaa; }
+        #interfaz-usuario p { margin: 0; font-size: 12px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div id="interfaz-usuario">
+        <h3>Avance 1: Enjambre de Peces Virtuales.</h3>
+        <p>Arrastra para rotar la cámara | Scroll para Zoom</p>
+        <p>Integrantes: Alan Gutierrez Gutierrez, Pamela Azcárate Rodríguez.</p>
+    </div>
+
+    <canvas id="canvas3d"></canvas>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
