@@ -1,23 +1,34 @@
-# Simulación de enjambres de peces virtuales - Avance 1
+# Proyecto Enjambre - Avance 2: Cardumen Optimizado con Shaders
 
-Este proyecto presenta la primera versión funcional de una simulación de enjambre autónomo en un entorno tridimensional, integrando los conceptos fundamentales de los frameworks gráficos y sistemas articulados jerárquicos.
+## Integrantes
+* Alan Gutierrez Gutierrez
+* Pamela Azcárate Rodríguez
 
-## Estructura del Proyecto
+## Objetivo de la Entrega
+Evolucionar la simulación base del primer avance para renderizar un enjambre masivo de **100 agentes autónomos** de forma simultánea, integrando optimizaciones de rendimiento por hardware (Instancing de T5) y sombreadores avanzados en la GPU (Vertex Deformation de T4), manteniendo una tasa de refresco superior a los 30 FPS obligatorios.
 
-El código se encuentra modularizado bajo el entorno de desarrollo Vite para garantizar un desacoplamiento limpio de la escena y el comportamiento de los agentes:
+---
 
-* **index.html**: Lienzo principal que monta el contenedor del DOM para el renderizado de WebGL.
-* **src/main.js**: Orquestador central de la aplicación. Configura la cámara perspectiva, inicializa el renderizador con Shadow Maps y gestiona la instanciación de 15 agentes autónomos distribuidos aleatoriamente en el espacio.
-* **src/escenaBase.js**: Define la atmósfera y el entorno acuático. Implementa una iluminación tenue con variaciones de color azul y verde que emulan la profundidad marina propuesta originalmente, asistida por luces hemisféricas y direccionales con proyección de sombras suaves.
-* **src/PezAgente.js**: Encapsula el modelo y comportamiento del agente pez. Construye una geometría jerárquica articulada (Cuerpo elipsoide -> Articulación de cola -> Aleta caudal) mediante el uso de `MeshPhongMaterial`. Controla de forma autónoma el vector de velocidad, la orientación adaptativa hacia el frente de avance y la física de rebote por inversión elástica en los límites del volumen.
+## 🛠️ Arquitectura y Optimizaciones Técnicas
 
-## Integración y Requisitos Cumplidos
-1. **Entorno de T1**: Escena base configurada con neblina de absorción de luz, piso marino y un esquema de iluminación dual con mapas de sombras activos.
-2. **Modularización**: El agente se encuentra completamente aislado dentro de una clase ES6 importable.
-3. **Instanciación Múltiple**: Se despliegan 15 instancias concurrentes en escena, cada una partiendo de una posición y orientación inicial únicas.
-4. **Movimiento Autónomo**: Los agentes se desplazan autónomamente en su espacio local y rebotan elásticamente al hacer contacto con las paredes del acuario.
+### 1. Renderizado Masivo con `THREE.InstancedMesh` (T5)
+En el avance previo, cada agente compuesto se gestionaba mediante un objeto `THREE.Group` individual, lo que generaba un *Draw Call* (llamada de dibujo) independiente hacia la GPU por cada pieza. Para escalar a 100 agentes sin degradar el rendimiento, se implementaron mallas instanciadas:
+* Se consolidaron tres objetos `InstancedMesh` en paralelo: uno para el **cuerpo**, otro para los **ojos** y otro para la **aleta dorsal**, recuperando la identidad visual y los materiales de la primera entrega.
+* En lugar de instanciar objetos en la CPU, se mantiene un arreglo lógico indexado (`cardumenLogico`). En cada frame, un nodo de transformación intermedio (`dummy`) calcula la matriz de posición, rotación y escala de cada pez, inyectándola directamente en los buffers de la GPU mediante `.setMatrixAt()`.
+* Las piezas satélites (ojos y aleta) heredan las transformaciones del cuerpo principal mediante pre-multiplicación de matrices espaciales (`dummyParte.matrix.premultiply()`). **Resultado:** El costo de renderizado pasó de cientos de llamadas de dibujo a un único *Draw Call* global.
 
-## Ejecución en Entorno Local
+### 2. Sombreadores Avanzados en GPU (T4)
+* **Vertex Deformation (Wobble):** Se inyectó código personalizado en GLSL utilizando el método `.onBeforeCompile` en los materiales de los peces. La animación ondulante del nado ahora se calcula de forma paralela en el *Vertex Shader* mediante una onda senoidal basada en el tiempo y la posición local $Z$ del vértice. Esto elimina la necesidad de mover articulaciones desde la CPU.
+* **Simulación de Superficie Marina:** Se añadió una capa de agua translúcida en el límite superior del acuario ($Y = 5$) mediante una geometría de plano subdividida. Su movimiento se rige por un sombreador secundario que calcula la interferencia de dos ondas senoidales cruzadas en la GPU para generar un efecto de oleaje orgánico.
 
-1. Instalar las dependencias del proyecto:
+### 3. Métricas de Rendimiento
+* Se integró la librería nativa `stats.js` para renderizar un monitor de rendimiento en tiempo real en la pantalla.
+* **Rendimiento obtenido:** Gracias al procesamiento por hardware, la simulación corre de forma estable a **60 FPS** (superando con creces el mínimo de 30 FPS solicitado).
+
+---
+
+## 🚀 Ejecución en Local
+
+1. Instalar las dependencias del proyecto (si es la primera vez):
+   ```bash
    npm install
