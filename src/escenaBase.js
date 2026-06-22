@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 export class EscenaBase {
-    // Código de la escena base
 }
 
 export function crearEntornoAcuatico(scene) {
