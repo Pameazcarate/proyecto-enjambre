@@ -1,17 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { crearEntornoAcuatico } from './escenaBase.js';
+import { BoidsSimulator, crearPanelControles } from './boidsSim.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
-let scene, camera, renderer, controls, stats;
+let scene, camera, renderer, controls, stats, boidsEngine;
 let instancedCuerpo, instancedOjos, instancedAletas, superficieMar;
-let cardumenLogico = [];
 
-const totalAgentes = 100; 
+// Requisito Final: Mínimo 200 agentes simultáneos
+const totalAgentes = 200; 
 const limitesEntorno = { x: 10, y: 5, z: 10 };
 const clock = new THREE.Clock();
 
-// Dummies para calcular transformaciones espaciales en GPU
 const dummyCuerpo = new THREE.Object3D();
 const dummyParte = new THREE.Object3D();
 
@@ -37,7 +37,6 @@ function init() {
 
     crearEntornoAcuatico(scene);
 
-    // --- Monitor de FPS ---
     stats = new Stats();
     stats.showPanel(0);
     document.body.appendChild(stats.dom);
@@ -45,37 +44,45 @@ function init() {
     stats.dom.style.left = 'auto';
     stats.dom.style.right = '20px';
 
-    // --- MATERIALES ORIGINALES (ENTREGA 1) ---
+    boidsEngine = new BoidsSimulator(totalAgentes, limitesEntorno);
+    crearPanelControles();
+
     const matCuerpo = new THREE.MeshPhongMaterial({ color: 0x00ffcc, shininess: 100, specular: 0xffffff });
     const matAletas = new THREE.MeshPhongMaterial({ color: 0xff0055, shininess: 80, side: THREE.DoubleSide });
     const matOjos = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 100 });
 
-    // --- GEOMETRÍAS ORIGINALES (ENTREGA 1) ---
-    // Cuerpo
     const geoCuerpo = new THREE.SphereGeometry(0.5, 16, 16);
-    geoCuerpo.scale(0.8, 1.2, 2.5); // Escala original de su clase PezAgente
-
-    // Ojos
+    geoCuerpo.scale(0.8, 1.2, 2.5);
     const geoOjo = new THREE.SphereGeometry(0.12, 8, 8);
-
-    // Aleta dorsal (Cono)
     const geoAleta = new THREE.ConeGeometry(0.1, 0.8, 4);
     geoAleta.rotateX(Math.PI / 4);
 
-    // --- INYECCIÓN DE SHADER VERTEX WOBBLE EN LOS MATERIALES ---
+    // Hornear offsets en el buffer para romper la sincronía de la cola en GPU
+    const offsets = new Float32Array(totalAgentes);
+    for (let i = 0; i < totalAgentes; i++) {
+        offsets[i] = boidsEngine.boids[i].timeOffset;
+    }
+    geoCuerpo.setAttribute('aTimeOffset', new THREE.InstancedBufferAttribute(offsets, 1));
+    geoAleta.setAttribute('aTimeOffset', new THREE.InstancedBufferAttribute(offsets, 1));
+
+    // Shader Avanzado Propio (T4) con soporte de desincronización por instancia
     const instanciarShaderWobble = (material, deformaAletas = false) => {
         material.onBeforeCompile = (shader) => {
             shader.uniforms.uTime = { value: 0 };
             material.userData.shader = shader;
-            shader.vertexShader = `uniform float uTime;\n` + shader.vertexShader;
+            shader.vertexShader = `
+                uniform float uTime;
+                attribute float aTimeOffset;
+            ` + shader.vertexShader;
+
             shader.vertexShader = shader.vertexShader.replace(
                 '#include <begin_vertex>',
                 `
                 #include <begin_vertex>
-                // Mayor frecuencia en aletas para nado dinámico
                 float freq = ${deformaAletas ? '6.0' : '4.0'};
                 float amp = ${deformaAletas ? '0.25' : '0.18'};
-                float deforma = sin(transformed.z * freq - uTime * 12.0) * amp;
+                // Uso de aTimeOffset para animaciones independientes
+                float deforma = sin(transformed.z * freq - (uTime + aTimeOffset) * 12.0) * amp;
                 
                 if(transformed.z > -0.2) {
                     transformed.x += deforma * (transformed.z + 0.2);
@@ -86,31 +93,22 @@ function init() {
     };
 
     instanciarShaderWobble(matCuerpo, false);
-    instanciarShaderWobble(matAletas, true); // Las aletas ondulan con un poco más de intensidad
+    instanciarShaderWobble(matAletas, true);
 
-    // --- INICIALIZACIÓN DE INSTANCED MESHES ---
     instancedCuerpo = new THREE.InstancedMesh(geoCuerpo, matCuerpo, totalAgentes);
-    instancedOjos = new THREE.InstancedMesh(geoOjo, matOjos, totalAgentes * 2); // 2 ojos por pez
-    instancedAletas = new THREE.InstancedMesh(geoAleta, matAletas, totalAgentes); // 1 aleta dorsal instanciada
+    instancedOjos = new THREE.InstancedMesh(geoOjo, matOjos, totalAgentes * 2);
+    instancedAletas = new THREE.InstancedMesh(geoAleta, matAletas, totalAgentes);
 
     instancedCuerpo.castShadow = true;
     instancedAletas.castShadow = true;
+    scene.add(instancedCuerpo, instancedOjos, instancedAletas);
 
-    scene.add(instancedCuerpo);
-    scene.add(instancedOjos);
-    scene.add(instancedAletas);
-
-    // --- SIMULACIÓN DE AGUA (SUPERFICIE MARINA) ---
+    // Superficie marina dinámica
     const geometriaMar = new THREE.PlaneGeometry(30, 30, 64, 64);
     geometriaMar.rotateX(-Math.PI / 2);
-
     const materialMar = new THREE.MeshPhongMaterial({
-        color: 0x005588,
-        shininess: 120,
-        specular: 0x00ffff,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.DoubleSide
+        color: 0x005588, shininess: 120, specular: 0x00ffff,
+        transparent: true, opacity: 0.5, side: THREE.DoubleSide
     });
 
     materialMar.onBeforeCompile = (shader) => {
@@ -132,23 +130,6 @@ function init() {
     superficieMar.position.y = limitesEntorno.y; 
     scene.add(superficieMar);
 
-    // --- CREACIÓN DEL CARDUMEN LÓGICO ---
-    for (let i = 0; i < totalAgentes; i++) {
-        cardumenLogico.push({
-            posicion: new THREE.Vector3(
-                (Math.random() - 0.5) * (limitesEntorno.x * 1.5),
-                (Math.random() - 0.5) * (limitesEntorno.y * 1.5),
-                (Math.random() - 0.5) * (limitesEntorno.z * 1.5)
-            ),
-            velocidad: new THREE.Vector3(
-                (Math.random() - 0.5) * 3,
-                (Math.random() - 0.5) * 2,
-                (Math.random() - 0.5) * 3
-            ).normalize().multiplyScalar(2.0 + Math.random() * 2.0),
-            escala: 0.7 + Math.random() * 0.4
-        });
-    }
-
     window.addEventListener('resize', onWindowResize);
 }
 
@@ -159,51 +140,41 @@ function animate() {
     const delta = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
 
-    // Sincronizar el tiempo global en los Shaders inyectados
     if (instancedCuerpo.material.userData.shader) instancedCuerpo.material.userData.shader.uniforms.uTime.value = elapsedTime;
     if (instancedAletas.material.userData.shader) instancedAletas.material.userData.shader.uniforms.uTime.value = elapsedTime;
     if (superficieMar.material.userData.shader) superficieMar.material.userData.shader.uniforms.uTime.value = elapsedTime;
 
-    cardumenLogico.forEach((pez, i) => {
-        // Movimiento autónomo y colisión perimetral
-        pez.posicion.addScaledVector(pez.velocidad, delta);
+    boidsEngine.actualizar(delta);
 
-        const hX = limitesEntorno.x, hY = limitesEntorno.y, hZ = limitesEntorno.z;
-        if (Math.abs(pez.posicion.x) > hX) { pez.velocidad.x *= -1; pez.posicion.x = Math.sign(pez.posicion.x) * hX; }
-        if (Math.abs(pez.posicion.y) > hY) { pez.velocidad.y *= -1; pez.posicion.y = Math.sign(pez.posicion.y) * hY; }
-        if (Math.abs(pez.posicion.z) > hZ) { pez.velocidad.z *= -1; pez.posicion.z = Math.sign(pez.posicion.z) * hZ; }
-
-        // 1. Posicionar Cuerpo Principal
+    boidsEngine.boids.forEach((pez, i) => {
         dummyCuerpo.position.copy(pez.posicion);
-        const anguloOrientacion = Math.atan2(-pez.velocidad.z, pez.velocidad.x);
-        dummyCuerpo.rotation.set(0, anguloOrientacion, 0);
+        
+        if (pez.velocidad.lengthSq() > 0.01) {
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, 0, -1), 
+                pez.velocidad.clone().normalize()
+            );
+            dummyCuerpo.quaternion.copy(quaternion);
+        }
+
         dummyCuerpo.scale.set(pez.escala, pez.escala, pez.escala);
         dummyCuerpo.updateMatrix();
         instancedCuerpo.setMatrixAt(i, dummyCuerpo.matrix);
 
-        // 2. Posicionar Ojo Izquierdo (Mismos offsets relativos del primer avance)
-        dummyParte.position.set(0.35, 0.2, -0.8);
-        dummyParte.rotation.set(0, 0, 0);
-        dummyParte.scale.set(1, 1, 1);
-        dummyParte.updateMatrix();
-        // Multiplicar por la matriz del cuerpo para heredar traslación y rotación global
+        // Ojos y Aletas jerárquicas
+        dummyParte.position.set(0.35, 0.2, -0.8); dummyParte.updateMatrix();
         dummyParte.matrix.premultiply(dummyCuerpo.matrix);
         instancedOjos.setMatrixAt(i * 2, dummyParte.matrix);
 
-        // 3. Posicionar Ojo Derecho
-        dummyParte.position.set(-0.35, 0.2, -0.8);
-        dummyParte.updateMatrix();
+        dummyParte.position.set(-0.35, 0.2, -0.8); dummyParte.updateMatrix();
         dummyParte.matrix.premultiply(dummyCuerpo.matrix);
         instancedOjos.setMatrixAt(i * 2 + 1, dummyParte.matrix);
 
-        // 4. Posicionar Aleta Dorsal Superior
-        dummyParte.position.set(0, 0.8, -0.2);
-        dummyParte.updateMatrix();
+        dummyParte.position.set(0, 0.8, -0.2); dummyParte.updateMatrix();
         dummyParte.matrix.premultiply(dummyCuerpo.matrix);
         instancedAletas.setMatrixAt(i, dummyParte.matrix);
     });
 
-    // Notificar actualizaciones de buffers a la GPU
     instancedCuerpo.instanceMatrix.needsUpdate = true;
     instancedOjos.instanceMatrix.needsUpdate = true;
     instancedAletas.instanceMatrix.needsUpdate = true;

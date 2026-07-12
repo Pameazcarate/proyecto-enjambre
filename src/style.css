@@ -30,3 +30,12 @@ canvas {
 
 #interfaz-usuario h3 { margin: 0 0 5px 0; font-size: 14px; text-transform: uppercase; color: #00ffaa; }
 #interfaz-usuario p { margin: 0; font-size: 12px; opacity: 0.8; line-height: 1.6; }
+
+.lil-gui {
+  --background-color: rgba(1, 17, 37, 0.9) !important;
+  --text-color: #ffffff !important;
+  --title-background-color: #01244a !important;
+  font-family: system-ui, sans-serif !important;
+  border: 1px solid #00aaff !important;
+  border-radius: 8px !important;
+}
