@@ -5,14 +5,14 @@
 * Pamela Azcárate Rodríguez
 
 ## Objetivo de la Entrega
-Evolucionar la simulación base del primer avance para renderizar un enjambre masivo de **100 agentes autónomos** de forma simultánea, integrando optimizaciones de rendimiento por hardware (Instancing de T5) y sombreadores avanzados en la GPU (Vertex Deformation de T4), manteniendo una tasa de refresco superior a los 30 FPS obligatorios.
+Evolucionar la simulación base del primer avance para renderizar un enjambre masivo de **200 agentes autónomos** de forma simultánea, integrando optimizaciones de rendimiento por hardware (Instancing de T5) y sombreadores avanzados en la GPU (Vertex Deformation de T4), manteniendo una tasa de refresco superior a los 30 FPS obligatorios.
 
 ---
 
 ## 🛠️ Arquitectura y Optimizaciones Técnicas
 
 ### 1. Renderizado Masivo con `THREE.InstancedMesh` (T5)
-En el avance previo, cada agente compuesto se gestionaba mediante un objeto `THREE.Group` individual, lo que generaba un *Draw Call* (llamada de dibujo) independiente hacia la GPU por cada pieza. Para escalar a 100 agentes sin degradar el rendimiento, se implementaron mallas instanciadas:
+En el avance previo, cada agente compuesto se gestionaba mediante un objeto `THREE.Group` individual, lo que generaba un *Draw Call* (llamada de dibujo) independiente hacia la GPU por cada pieza. Para escalar a 200 agentes sin degradar el rendimiento, se implementaron mallas instanciadas:
 * Se consolidaron tres objetos `InstancedMesh` en paralelo: uno para el **cuerpo**, otro para los **ojos** y otro para la **aleta dorsal**, recuperando la identidad visual y los materiales de la primera entrega.
 * En lugar de instanciar objetos en la CPU, se mantiene un arreglo lógico indexado (`cardumenLogico`). En cada frame, un nodo de transformación intermedio (`dummy`) calcula la matriz de posición, rotación y escala de cada pez, inyectándola directamente en los buffers de la GPU mediante `.setMatrixAt()`.
 * Las piezas satélites (ojos y aleta) heredan las transformaciones del cuerpo principal mediante pre-multiplicación de matrices espaciales (`dummyParte.matrix.premultiply()`). **Resultado:** El costo de renderizado pasó de cientos de llamadas de dibujo a un único *Draw Call* global.
