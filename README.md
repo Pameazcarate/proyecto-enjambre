@@ -1,4 +1,4 @@
-# Proyecto Enjambre - Avance 2: Cardumen Optimizado con Shaders
+# Proyecto Enjambre
 
 ## Integrantes
 * Alan Gutierrez Gutierrez
